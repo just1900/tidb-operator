@@ -240,6 +240,94 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 			framework.ExpectNoError(err, "connect to TLS tidb %s timeout", tcName2)
 		})
 	})
+
+	ginkgo.Describe("[Rolling Upgrade]", func(){
+		// create three namespace
+		ginkgo.BeforeEach(func() {
+			ns1 := namespaces[0]
+			namespaces = append(namespaces, ns1+"-1", ns1+"-2")
+		})
+
+		version := utilimage.TiDBLatest
+		clusterDomain := defaultClusterDomain
+		ginkgo.It("X-k8s tidbcluster rolling upgrade normally and do not affect each other", func() {
+			ns1, ns2, ns3 := namespaces[0], namespaces[1], namespaces[2]
+			tcName1, tcName2, tcName3 := "cluster-1", "cluster-2", "cluster-3"
+			tc1 := GetTCForAcrossKubernetes(ns1, tcName1, version, clusterDomain, nil)
+			tc2 := GetTCForAcrossKubernetes(ns2, tcName2, version, clusterDomain, tc1)
+			tc3 := GetTCForAcrossKubernetes(ns3, tcName3, version, clusterDomain, tc1)
+
+			ginkgo.By("Installing initial tidb CA certificate")
+			err := InstallTiDBIssuer(ns1, tcName1)
+			framework.ExpectNoError(err, "failed to install CA certificate")
+
+			ginkgo.By("Export initial CA secret and install into other tidb clusters")
+			var caSecret *v1.Secret
+			err = wait.PollImmediate(5*time.Second, 1*time.Minute, func() (bool, error) {
+				caSecret, err = c.CoreV1().Secrets(ns1).Get(context.TODO(), fmt.Sprintf("%s-ca-secret", tcName1), metav1.GetOptions{})
+				if err != nil {
+					return false, nil
+				}
+				return true, nil
+			})
+			framework.ExpectNoError(err, "error export initial CA secert")
+			caSecret.ObjectMeta.ResourceVersion = ""
+			caSecret.Namespace = ns2
+			err = genericCli.Create(context.TODO(), caSecret)
+			framework.ExpectNoError(err, "error installing CA secert into cluster %q", tcName2)
+			caSecret.ObjectMeta.ResourceVersion = ""
+			caSecret.Namespace = ns3
+			err = genericCli.Create(context.TODO(), caSecret)
+			framework.ExpectNoError(err, "error installing CA secert into cluster %q", tcName3)
+
+			ginkgo.By("Installing tidb cluster issuer with initial ca")
+			err = InstallXK8sTiDBIssuer(ns2, tcName2, tcName1)
+			framework.ExpectNoError(err, "failed to install tidb issuer for cluster %q", tcName2)
+			err = InstallXK8sTiDBIssuer(ns3, tcName3, tcName1)
+			framework.ExpectNoError(err, "failed to install tidb issuer for cluster %q", tcName3)
+
+			ginkgo.By("Installing tidb server and client certificate")
+			err = InstallXK8sTiDBCertificates(ns1, tcName1, clusterDomain)
+			framework.ExpectNoError(err, "failed to install tidb server and client certificate for cluster: %q", tcName1)
+			err = InstallXK8sTiDBCertificates(ns2, tcName2, clusterDomain)
+			framework.ExpectNoError(err, "failed to install tidb server and client certificate for cluster: %q", tcName2)
+			err = InstallXK8sTiDBCertificates(ns3, tcName3, clusterDomain)
+			framework.ExpectNoError(err, "failed to install tidb server and client certificate for cluster: %q", tcName3)
+
+			ginkgo.By("Installing tidb components certificates")
+			err = InstallXK8sTiDBComponentsCertificates(ns1, tcName1, clusterDomain)
+			framework.ExpectNoError(err, "failed to install tidb components certificates for cluster: %q", tcName1)
+			err = InstallXK8sTiDBComponentsCertificates(ns2, tcName2, clusterDomain)
+			framework.ExpectNoError(err, "failed to install tidb components certificates for cluster: %q", tcName2)
+			err = InstallXK8sTiDBComponentsCertificates(ns3, tcName3, clusterDomain)
+			framework.ExpectNoError(err, "failed to install tidb components certificates for cluster: %q", tcName3)
+
+			ginkgo.By("Creating x-k8s tidb clusters with TLS enabled")
+			tc1.Spec.TiDB.TLSClient = &v1alpha1.TiDBTLSClient{Enabled: true}
+			tc1.Spec.TLSCluster = &v1alpha1.TLSCluster{Enabled: true}
+			utiltc.MustCreateTCWithComponentsReady(genericCli, oa, tc1, 10*time.Minute, 30*time.Second)
+
+			tc2.Spec.TiDB.TLSClient = &v1alpha1.TiDBTLSClient{Enabled: true}
+			tc2.Spec.TLSCluster = &v1alpha1.TLSCluster{Enabled: true}
+			utiltc.MustCreateTCWithComponentsReady(genericCli, oa, tc2, 10*time.Minute, 30*time.Second)
+
+			tc3.Spec.TiDB.TLSClient = &v1alpha1.TiDBTLSClient{Enabled: true}
+			tc3.Spec.TLSCluster = &v1alpha1.TLSCluster{Enabled: true}
+			utiltc.MustCreateTCWithComponentsReady(genericCli, oa, tc3, 10*time.Minute, 30*time.Second)
+
+			ginkgo.By("Upgrade cluster-1 and ensure rolling upgrade")
+			local, err := cli.PingcapV1alpha1().TidbClusters(tc1.Namespace).Get(context.TODO(), tc1.Name, metav1.GetOptions{})
+			framework.ExpectNoError(err, "getting tidbcluster %s/%s", tc1.Namespace, tc1.Name)
+			local.Spec.Version = utilimage.TiDBLatest
+			wait.PollImmediate(10 * time.Second,5 * time.Minute, func() (bool,error)){
+
+			}
+
+			ginkgo.By("Ensure other clusters are not upgraded")
+
+		})
+
+	})
 })
 
 func GetTCForAcrossKubernetes(ns, name, version, clusterDomain string, joinTC *v1alpha1.TidbCluster) *v1alpha1.TidbCluster {
