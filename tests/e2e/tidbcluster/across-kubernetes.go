@@ -16,6 +16,7 @@ package tidbcluster
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -241,21 +242,21 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 		})
 	})
 
-	ginkgo.Describe("[Rolling Upgrade]", func(){
+	ginkgo.Describe("[Upgrade]", func() {
 		// create three namespace
 		ginkgo.BeforeEach(func() {
 			ns1 := namespaces[0]
 			namespaces = append(namespaces, ns1+"-1", ns1+"-2")
 		})
 
-		version := utilimage.TiDBLatest
+		versionOld := utilimage.TiDBLatestPrev
 		clusterDomain := defaultClusterDomain
-		ginkgo.It("X-k8s tidbcluster rolling upgrade normally and do not affect each other", func() {
+		ginkgo.It("X-k8s tidbcluster should upgrade normally and do not affect others", func() {
 			ns1, ns2, ns3 := namespaces[0], namespaces[1], namespaces[2]
 			tcName1, tcName2, tcName3 := "cluster-1", "cluster-2", "cluster-3"
-			tc1 := GetTCForAcrossKubernetes(ns1, tcName1, version, clusterDomain, nil)
-			tc2 := GetTCForAcrossKubernetes(ns2, tcName2, version, clusterDomain, tc1)
-			tc3 := GetTCForAcrossKubernetes(ns3, tcName3, version, clusterDomain, tc1)
+			tc1 := GetTCForAcrossKubernetes(ns1, tcName1, versionOld, clusterDomain, nil)
+			tc2 := GetTCForAcrossKubernetes(ns2, tcName2, versionOld, clusterDomain, tc1)
+			tc3 := GetTCForAcrossKubernetes(ns3, tcName3, versionOld, clusterDomain, tc1)
 
 			ginkgo.By("Installing initial tidb CA certificate")
 			err := InstallTiDBIssuer(ns1, tcName1)
@@ -315,15 +316,55 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 			tc3.Spec.TLSCluster = &v1alpha1.TLSCluster{Enabled: true}
 			utiltc.MustCreateTCWithComponentsReady(genericCli, oa, tc3, 10*time.Minute, 30*time.Second)
 
-			ginkgo.By("Upgrade cluster-1 and ensure rolling upgrade")
-			local, err := cli.PingcapV1alpha1().TidbClusters(tc1.Namespace).Get(context.TODO(), tc1.Name, metav1.GetOptions{})
+			ginkgo.By("upgrade cluster-1 version")
+			tc1, err = cli.PingcapV1alpha1().TidbClusters(tc1.Namespace).Get(context.TODO(), tc1.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "getting tidbcluster %s/%s", tc1.Namespace, tc1.Name)
-			local.Spec.Version = utilimage.TiDBLatest
-			wait.PollImmediate(10 * time.Second,5 * time.Minute, func() (bool,error)){
+			err = controller.GuaranteedUpdate(genericCli, tc1, func() error {
+				tc1.Spec.Version = utilimage.TiDBLatest
+				return nil
+			})
+			framework.ExpectNoError(err, "updating tidbCluster version")
+			err = oa.WaitForTidbClusterReady(tc1, 15*time.Minute, 10*time.Second)
+			framework.ExpectNoError(err, "failed to wait for TidbCluster %s/%s components ready", ns1, tcName1)
 
+			ginkgo.By("Ensure Components are upgraded for cluster-1")
+			stsList, err := c.AppsV1().StatefulSets(ns1).List(context.TODO(), metav1.ListOptions{})
+			framework.ExpectNoError(err, "failed to get StatefulSet List %s", ns1)
+			componentsRe := regexp.MustCompile("pd|tidb|tikv|tiflash|pump|ticdc")
+			for _, sts := range stsList.Items {
+				var ver string
+				for _, container := range sts.Spec.Template.Spec.Containers {
+					if componentsRe.MatchString(container.Name) {
+						ver = strings.Split(container.Image, ":")[1]
+						break
+					}
+				}
+				framework.ExpectEqual(ver, versionOld, "image version should be %q rather than ", versionOld, ver)
 			}
 
 			ginkgo.By("Ensure other clusters are not upgraded")
+			err = wait.PollImmediate(10*time.Second, 2*time.Minute, func() (bool, error) {
+				tc, err := cli.PingcapV1alpha1().TidbClusters(ns2).Get(context.TODO(), tcName2, metav1.GetOptions{})
+				framework.ExpectNoError(err, "Expected get tidbcluster")
+				framework.ExpectEqual(tc.Status.PD.Phase, v1alpha1.NormalPhase, "PD should not be updated")
+				framework.ExpectEqual(tc.Status.TiKV.Phase, v1alpha1.NormalPhase, "TiKV should not be updated")
+				framework.ExpectEqual(tc.Status.TiDB.Phase, v1alpha1.NormalPhase, "TiDB should not be updated")
+
+				stsList, err := c.AppsV1().StatefulSets(ns1).List(context.TODO(), metav1.ListOptions{})
+				framework.ExpectNoError(err, "failed to get StatefulSet List %s", ns1)
+				for _, sts := range stsList.Items {
+					var ver string
+					for _, container := range sts.Spec.Template.Spec.Containers {
+						if componentsRe.MatchString(container.Name) {
+							ver = strings.Split(container.Image, ":")[1]
+							break
+						}
+					}
+					framework.ExpectEqual(ver, versionOld, "image version should be %q rather than ", versionOld, ver)
+				}
+				return false, nil
+			})
+			framework.ExpectEqual(err, wait.ErrWaitTimeout, "Unexpected error when checking tidb statefulset will not get rolling-update: %v", err)
 
 		})
 
