@@ -324,32 +324,26 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 				return nil
 			})
 			framework.ExpectNoError(err, "updating tidbCluster version")
+			wait.PollImmediate(10*time.Second, 2*time.Minute, func() (bool, error) {
+				stsList, err := c.AppsV1().StatefulSets(ns1).List(context.TODO(), metav1.ListOptions{})
+				framework.ExpectNoError(err, "failed to get StatefulSet List %s", ns1)
+				componentsRe := regexp.MustCompile("pd|tidb|tikv|tiflash|pump|ticdc")
+				for _, sts := range stsList.Items {
+					for _, container := range sts.Spec.Template.Spec.Containers {
+						if componentsRe.MatchString(container.Name) && strings.Contains(container.Name, versionOld) {
+							return false, nil
+						}
+					}
+				}
+				return true, nil
+			})
+			ginkgo.By("Ensure Components are upgraded for cluster-1")
+
 			err = oa.WaitForTidbClusterReady(tc1, 15*time.Minute, 10*time.Second)
 			framework.ExpectNoError(err, "failed to wait for TidbCluster %s/%s components ready", ns1, tcName1)
 
-			ginkgo.By("Ensure Components are upgraded for cluster-1")
-			stsList, err := c.AppsV1().StatefulSets(ns1).List(context.TODO(), metav1.ListOptions{})
-			framework.ExpectNoError(err, "failed to get StatefulSet List %s", ns1)
-			componentsRe := regexp.MustCompile("pd|tidb|tikv|tiflash|pump|ticdc")
-			for _, sts := range stsList.Items {
-				var ver string
-				for _, container := range sts.Spec.Template.Spec.Containers {
-					if componentsRe.MatchString(container.Name) {
-						ver = strings.Split(container.Image, ":")[1]
-						break
-					}
-				}
-				framework.ExpectEqual(ver, versionOld, "image version should be %q rather than ", versionOld, ver)
-			}
-
 			ginkgo.By("Ensure other clusters are not upgraded")
 			err = wait.PollImmediate(10*time.Second, 2*time.Minute, func() (bool, error) {
-				tc, err := cli.PingcapV1alpha1().TidbClusters(ns2).Get(context.TODO(), tcName2, metav1.GetOptions{})
-				framework.ExpectNoError(err, "Expected get tidbcluster")
-				framework.ExpectEqual(tc.Status.PD.Phase, v1alpha1.NormalPhase, "PD should not be updated")
-				framework.ExpectEqual(tc.Status.TiKV.Phase, v1alpha1.NormalPhase, "TiKV should not be updated")
-				framework.ExpectEqual(tc.Status.TiDB.Phase, v1alpha1.NormalPhase, "TiDB should not be updated")
-
 				stsList, err := c.AppsV1().StatefulSets(ns1).List(context.TODO(), metav1.ListOptions{})
 				framework.ExpectNoError(err, "failed to get StatefulSet List %s", ns1)
 				for _, sts := range stsList.Items {
@@ -360,11 +354,15 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 							break
 						}
 					}
-					framework.ExpectEqual(ver, versionOld, "image version should be %q rather than ", versionOld, ver)
+					framework.ExpectEqual(ver, versionOld, "image version should be %q rather than %q", versionOld, ver)
 				}
 				return false, nil
 			})
-			framework.ExpectEqual(err, wait.ErrWaitTimeout, "Unexpected error when checking tidb statefulset will not get rolling-update: %v", err)
+			framework.ExpectEqual(err, wait.ErrWaitTimeout, "Checking tidbcluster not get upgraded: %v", err)
+
+			ginkgo.By("Check tidbcluster status")
+			err = wait.PollImmediate(time.Second*5, time.Minute*5, tidbIsTLSEnabled(fw, c, ns2, tcName2, ""))
+			framework.ExpectNoError(err, "connect to TLS tidb %s timeout", tcName1)
 
 		})
 
