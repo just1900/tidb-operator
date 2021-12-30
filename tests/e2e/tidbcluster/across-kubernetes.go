@@ -316,7 +316,7 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 			tc3.Spec.TLSCluster = &v1alpha1.TLSCluster{Enabled: true}
 			utiltc.MustCreateTCWithComponentsReady(genericCli, oa, tc3, 10*time.Minute, 30*time.Second)
 
-			ginkgo.By("upgrade cluster-1 version")
+			ginkgo.By("Upgrade cluster-1 version")
 			tc1, err = cli.PingcapV1alpha1().TidbClusters(tc1.Namespace).Get(context.TODO(), tc1.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "getting tidbcluster %s/%s", tc1.Namespace, tc1.Name)
 			err = controller.GuaranteedUpdate(genericCli, tc1, func() error {
@@ -324,10 +324,12 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 				return nil
 			})
 			framework.ExpectNoError(err, "updating tidbCluster version")
-			wait.PollImmediate(10*time.Second, 2*time.Minute, func() (bool, error) {
+
+			ginkgo.By("Ensure Components are upgraded for cluster-1")
+			componentsRe := regexp.MustCompile("pd|tidb|tikv|tiflash|pump|ticdc")
+			wait.PollImmediate(10*time.Second, 5*time.Minute, func() (bool, error) {
 				stsList, err := c.AppsV1().StatefulSets(ns1).List(context.TODO(), metav1.ListOptions{})
 				framework.ExpectNoError(err, "failed to get StatefulSet List %s", ns1)
-				componentsRe := regexp.MustCompile("pd|tidb|tikv|tiflash|pump|ticdc")
 				for _, sts := range stsList.Items {
 					for _, container := range sts.Spec.Template.Spec.Containers {
 						if componentsRe.MatchString(container.Name) && strings.Contains(container.Name, versionOld) {
@@ -337,8 +339,6 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 				}
 				return true, nil
 			})
-			ginkgo.By("Ensure Components are upgraded for cluster-1")
-
 			err = oa.WaitForTidbClusterReady(tc1, 15*time.Minute, 10*time.Second)
 			framework.ExpectNoError(err, "failed to wait for TidbCluster %s/%s components ready", ns1, tcName1)
 
