@@ -186,6 +186,7 @@ func (m *pdMemberManager) syncPDStatefulSetForTidbCluster(tc *v1alpha1.TidbClust
 
 	oldPDSet := oldPDSetTmp.DeepCopy()
 
+	klog.Infof("syncing tidb clsuter status for cluster %s/%s", ns, tcName)
 	if err := m.syncTidbClusterStatus(tc, oldPDSet); err != nil {
 		klog.Errorf("failed to sync TidbCluster: [%s/%s]'s status, error: %v", ns, tcName, err)
 	}
@@ -314,7 +315,12 @@ func (m *pdMemberManager) syncTidbClusterStatus(tc *v1alpha1.TidbCluster, set *a
 
 	pdClient := controller.GetPDClient(m.deps.PDControl, tc)
 
+	pdLeader, err := pdClient.GetPDLeader()
+	if err != nil {
+		klog.Errorf("getting pd leader for cluster %s/%s", ns, tcName)
+	}
 	healthInfo, err := pdClient.GetHealth()
+	klog.Infof("healthInfo:  %v, from pd client %v for cluster %s/%s", healthInfo, pdLeader, ns, tcName)
 	if err != nil {
 		tc.Status.PD.Synced = false
 		// get endpoints info

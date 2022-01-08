@@ -96,6 +96,10 @@ fi
 docker_args+=(
     --privileged
     -e DOCKER_IN_DOCKER_ENABLED=true
+    -e DOCKER_IO_MIRROR="http://registry-mirror.pingcap.net"
+    -e GCR_IO_MIRROR="https://gcr-mirror.pingcap.net"
+    -e K8S_GCR_IO_MIRROR="https://k8s-gcr-mirror.pingcap.net"
+    -e QUAY_IO_MIRROR="https://quay-mirror.pingcap.net"
     # Docker in Docker expects it to be a volume
     -v $DOCKER_LIB_VOLUME:/var/lib/docker
     -v $DOCKER_GRAPH_VOLUME:/docker-graph # legacy path for gcr.io/k8s-testimages/kubekins-e2e
