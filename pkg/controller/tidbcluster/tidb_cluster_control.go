@@ -150,11 +150,11 @@ func (c *defaultTidbClusterControl) updateTidbCluster(tc *v1alpha1.TidbCluster) 
 	if err != nil {
 		return err
 	}
-	if klog.V(10).Enabled() {
-		for podName, reason := range skipReasons {
-			klog.Infof("pod %s of cluster %s/%s is skipped, reason %q", podName, tc.Namespace, tc.Name, reason)
-		}
+	// if klog.V(10).Enabled() {
+	for podName, reason := range skipReasons {
+		klog.Infof("pod %s of cluster %s/%s is skipped, reason %q", podName, tc.Namespace, tc.Name, reason)
 	}
+	// }
 
 	// reconcile TiDB discovery service
 	if err := c.discoveryManager.Reconcile(tc); err != nil {
@@ -172,6 +172,7 @@ func (c *defaultTidbClusterControl) updateTidbCluster(tc *v1alpha1.TidbCluster) 
 	//   - upgrade the pd cluster
 	//   - scale out/in the pd cluster
 	//   - failover the pd cluster
+	klog.Infof("sync pd for clsuter %s/%s", tc.Namespace, tc.Name)
 	if err := c.pdMemberManager.Sync(tc); err != nil {
 		return err
 	}
