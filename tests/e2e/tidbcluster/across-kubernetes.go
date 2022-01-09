@@ -388,7 +388,7 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 		version := utilimage.TiDBLatest
 		clusterDomain := defaultClusterDomain
 
-		ginkgo.It("Components work normally after pod restart though PD/TiKVs in the same TC failed", func() {
+		ginkgo.It("4352Components work normally after pod restart though PD/TiKVs in the same TC failed", func() {
 			ns1, ns2, ns3 := namespaces[0], namespaces[1], namespaces[2]
 			tcName1, tcName2, tcName3 := "cluster-1", "cluster-2", "cluster-3"
 			tc1 := GetTCForAcrossKubernetes(ns1, tcName1, version, clusterDomain, nil)
