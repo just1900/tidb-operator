@@ -488,7 +488,7 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 			componentsFilter[v1alpha1.TiKVMemberType] = struct{}{}
 			err = oa.WaitForTidbComponentsReady(tc1, componentsFilter, 15*time.Minute, 30*time.Second)
 			framework.ExpectNoError(err, "waiting for other components to be ready")
-			err = wait.PollImmediate(time.Second*5, time.Minute*5, tidbIsTLSEnabled(fw, c, ns1, tcName1, ""))
+			err = wait.PollImmediate(time.Second*15, time.Minute*10, tidbIsTLSEnabled(fw, c, ns1, tcName1, ""))
 			framework.ExpectNoError(err, "connect to TLS tidb %s timeout", tcName1)
 
 			ginkgo.By("Fail PD in cluster-1 by setting a wrong image")
