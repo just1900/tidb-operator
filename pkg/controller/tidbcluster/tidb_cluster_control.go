@@ -188,6 +188,7 @@ func (c *defaultTidbClusterControl) updateTidbCluster(tc *v1alpha1.TidbCluster) 
 	//   - upgrade the tiflash cluster
 	//   - scale out/in the tiflash cluster
 	//   - failover the tiflash cluster
+	klog.Infof("sync tiflash for clsuter %s/%s", tc.Namespace, tc.Name)
 	if err := c.tiflashMemberManager.Sync(tc); err != nil {
 		return err
 	}
@@ -201,11 +202,13 @@ func (c *defaultTidbClusterControl) updateTidbCluster(tc *v1alpha1.TidbCluster) 
 	//   - upgrade the tikv cluster
 	//   - scale out/in the tikv cluster
 	//   - failover the tikv cluster
+	klog.Infof("sync tikv for clsuter %s/%s", tc.Namespace, tc.Name)
 	if err := c.tikvMemberManager.Sync(tc); err != nil {
 		return err
 	}
 
 	// syncing the pump cluster
+	klog.Infof("sync pump for clsuter %s/%s", tc.Namespace, tc.Name)
 	if err := c.pumpMemberManager.Sync(tc); err != nil {
 		return err
 	}
@@ -218,6 +221,7 @@ func (c *defaultTidbClusterControl) updateTidbCluster(tc *v1alpha1.TidbCluster) 
 	//   - upgrade the tidb cluster
 	//   - scale out/in the tidb cluster
 	//   - failover the tidb cluster
+	klog.Infof("sync tidb for clsuter %s/%s", tc.Namespace, tc.Name)
 	if err := c.tidbMemberManager.Sync(tc); err != nil {
 		return err
 	}
@@ -225,6 +229,7 @@ func (c *defaultTidbClusterControl) updateTidbCluster(tc *v1alpha1.TidbCluster) 
 	//   - waiting for the pd cluster available(pd cluster is in quorum)
 	//   - create or update ticdc deployment
 	//   - sync ticdc cluster status from pd to TidbCluster object
+	klog.Infof("sync ticdc for clsuter %s/%s", tc.Namespace, tc.Name)
 	if err := c.ticdcMemberManager.Sync(tc); err != nil {
 		return err
 	}

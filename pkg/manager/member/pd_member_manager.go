@@ -186,7 +186,7 @@ func (m *pdMemberManager) syncPDStatefulSetForTidbCluster(tc *v1alpha1.TidbClust
 
 	oldPDSet := oldPDSetTmp.DeepCopy()
 
-	klog.Infof("syncing tidb clsuter status for cluster %s/%s", ns, tcName)
+	klog.Infof("pd: syncing tidb clsuter status for cluster %s/%s", ns, tcName)
 	if err := m.syncTidbClusterStatus(tc, oldPDSet); err != nil {
 		klog.Errorf("failed to sync TidbCluster: [%s/%s]'s status, error: %v", ns, tcName, err)
 	}
@@ -196,6 +196,7 @@ func (m *pdMemberManager) syncPDStatefulSetForTidbCluster(tc *v1alpha1.TidbClust
 		return nil
 	}
 
+	klog.Infof("syncing pd configmap for cluster %s/%s", ns, tcName)
 	cm, err := m.syncPDConfigMap(tc, oldPDSet)
 	if err != nil {
 		return err
@@ -233,6 +234,7 @@ func (m *pdMemberManager) syncPDStatefulSetForTidbCluster(tc *v1alpha1.TidbClust
 		return err
 	}
 
+	klog.Infof("check should failover for cluster %s/%s", ns, tcName)
 	if m.deps.CLIConfig.AutoFailover {
 		if m.shouldRecover(tc) {
 			m.failover.Recover(tc)
@@ -353,6 +355,7 @@ func (m *pdMemberManager) syncTidbClusterStatus(tc *v1alpha1.TidbCluster, set *a
 	}
 	pdStatus := map[string]v1alpha1.PDMember{}
 	peerPDStatus := map[string]v1alpha1.PDMember{}
+	klog.Infof("rendering status.pd.members for cluster %s/%s", ns, tcName)
 	for _, memberHealth := range healthInfo.Healths {
 		memberID := memberHealth.MemberID
 		var clientURL string
@@ -402,6 +405,7 @@ func (m *pdMemberManager) syncTidbClusterStatus(tc *v1alpha1.TidbCluster, set *a
 		tc.Status.PD.Image = c.Image
 	}
 
+	klog.Infof("collect unjoined members for cluster %s/%s", ns, tcName)
 	if err := m.collectUnjoinedMembers(tc, set, pdStatus); err != nil {
 		return err
 	}
