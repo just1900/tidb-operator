@@ -493,10 +493,15 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 
 			ginkgo.By("Fail PD in cluster-1 by setting a wrong image")
 			err = controller.GuaranteedUpdate(genericCli, tc1, func() error {
+				old := tc1.Spec.PD.BaseImage
 				tc1.Spec.PD.BaseImage = inexistentBaseImage
+				log.Logf("oldImage: %s,new: %s", old, tc1.Spec.PD.BaseImage)
 				return nil
 			})
 			framework.ExpectNoError(err, "updating pd with an inexistent image %q for %q", tc1.Spec.PD.BaseImage, tcName1)
+			// force operator to trigger an upgrade.
+			err = c.AppsV1().StatefulSets(ns1).Delete(context.TODO(), fmt.Sprintf("%s-pd", tcName1), metav1.DeleteOptions{})
+			framework.ExpectNoError(err, "deleting sts of pd for %q", tcName1)
 
 			ginkgo.By("Waiting for pd pods to be in unhealthy state")
 			err = utiltc.WaitForTidbClusterCondition(cli, ns1, tcName1, time.Minute*10, func(tc *v1alpha1.TidbCluster) (bool, error) {
