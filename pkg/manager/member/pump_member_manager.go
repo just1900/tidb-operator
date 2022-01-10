@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/pingcap/tidb-operator/pkg/apis/label"
 	"github.com/pingcap/tidb-operator/pkg/apis/pingcap/v1alpha1"
@@ -94,6 +95,7 @@ func (m *pumpMemberManager) syncPumpStatefulSetForTidbCluster(tc *v1alpha1.TidbC
 		return nil
 	}
 
+	klog.Infof("pump: sync configmap for cluster %s/%s", tc.Namespace, tc.Name)
 	cm, err := m.syncConfigMap(tc, oldSet)
 	if err != nil {
 		return err
@@ -149,6 +151,7 @@ func buildBinlogClient(tc *v1alpha1.TidbCluster, control pdapi.PDControlInterfac
 		return nil, err
 	}
 
+	klog.Infof("build binlog client with endpoints %s for clsuter %s/%s", endpoints, tc.Namespace, tc.Name)
 	client, err = binlog.NewBinlogClient(endpoints, tlsConfig)
 	if err != nil {
 		return nil, err
@@ -184,7 +187,9 @@ func (m *pumpMemberManager) syncTiDBClusterStatus(tc *v1alpha1.TidbCluster, set 
 	defer client.Close()
 
 	klog.Infof("pump: node status for cluser %s/%s", tc.Namespace, tc.Name)
-	status, err := client.PumpNodeStatus(context.TODO())
+	ctx, cancel := context.WithTimeout(context.TODO(), 30*time.Second)
+	defer cancel()
+	status, err := client.PumpNodeStatus(ctx)
 	if err != nil {
 		return err
 	}
