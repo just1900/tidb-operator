@@ -176,12 +176,14 @@ func (m *pumpMemberManager) syncTiDBClusterStatus(tc *v1alpha1.TidbCluster, set 
 		tc.Status.Pump.Phase = v1alpha1.NormalPhase
 	}
 
+	klog.Infof("pump: building binlog client for cluser %s/%s", tc.Namespace, tc.Name)
 	client, err := m.buildBinlogClient(tc, m.deps.PDControl)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 
+	klog.Infof("pump: node status for cluser %s/%s", tc.Namespace, tc.Name)
 	status, err := client.PumpNodeStatus(context.TODO())
 	if err != nil {
 		return err
