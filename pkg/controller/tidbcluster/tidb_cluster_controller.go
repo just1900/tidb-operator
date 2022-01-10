@@ -156,6 +156,7 @@ func (c *Controller) sync(key string) error {
 }
 
 func (c *Controller) syncTidbCluster(tc *v1alpha1.TidbCluster) error {
+	klog.Infof("start updating tidbcluster %s/%s", tc.Namespace, tc.Name)
 	return c.control.UpdateTidbCluster(tc)
 }
 

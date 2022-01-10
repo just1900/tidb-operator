@@ -139,6 +139,7 @@ func (c *defaultTidbClusterControl) defaulting(tc *v1alpha1.TidbCluster) {
 
 func (c *defaultTidbClusterControl) updateTidbCluster(tc *v1alpha1.TidbCluster) error {
 	c.recordMetrics(tc)
+	klog.Infof("sync PVs for tc %s/%s", tc.Namespace, tc.Name)
 	// syncing all PVs managed by operator's reclaim policy to Retain
 	if err := c.reclaimPolicyManager.Sync(tc); err != nil {
 		return err
@@ -156,6 +157,7 @@ func (c *defaultTidbClusterControl) updateTidbCluster(tc *v1alpha1.TidbCluster) 
 	}
 	// }
 
+	klog.Infof("reconcile TiDB discovery service for cluster %s/%s", tc.Namespace, tc.Name)
 	// reconcile TiDB discovery service
 	if err := c.discoveryManager.Reconcile(tc); err != nil {
 		return err

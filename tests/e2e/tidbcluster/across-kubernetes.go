@@ -453,44 +453,6 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 			tc3.Spec.TLSCluster = &v1alpha1.TLSCluster{Enabled: true}
 			utiltc.MustCreateTCWithComponentsReady(genericCli, oa, tc3, 10*time.Minute, 30*time.Second)
 
-			ginkgo.By("Fail TiKV in cluster-1 by setting a wrong image")
-			err = controller.GuaranteedUpdate(genericCli, tc1, func() error {
-				tc1.Spec.TiKV.BaseImage = inexistentBaseImage
-				return nil
-			})
-			framework.ExpectNoError(err, "updating tikv with an inexistent image %q for %q", tc1.Spec.TiKV.BaseImage, tcName1)
-			// force operator to trigger an upgrade.
-			err = c.AppsV1().StatefulSets(ns1).Delete(context.TODO(), fmt.Sprintf("%s-tikv", tcName1), metav1.DeleteOptions{})
-			framework.ExpectNoError(err, "deleting sts of tikv for %q", tcName1)
-
-			ginkgo.By("Waiting for tikv pod to be unavailable")
-			err = utiltc.WaitForTidbClusterCondition(cli, tc1.Namespace, tc1.Name, time.Minute*5, func(tc *v1alpha1.TidbCluster) (bool, error) {
-				down := true
-				for _, store := range tc.Status.TiKV.Stores {
-					down = down && (store.State == "Disconnected" || store.State == v1alpha1.TiKVStateDown)
-				}
-				return down, nil
-			})
-			framework.ExpectNoError(err, "waiting for tikv pod to be unavailable")
-
-			ginkgo.By("Restart other component pods")
-			podList, err := c.CoreV1().Pods(ns1).List(context.TODO(), metav1.ListOptions{})
-			framework.ExpectNoError(err, "list pods under namespace %q", ns1)
-			for _, pod := range podList.Items {
-				if !strings.Contains(pod.Name, "tikv") {
-					err := c.CoreV1().Pods(ns1).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
-					framework.ExpectNoError(err, "failed to delete pod %q", pod.Name)
-				}
-			}
-
-			ginkgo.By("Check cluster components status")
-			componentsFilter := make(map[v1alpha1.MemberType]struct{}, 2)
-			componentsFilter[v1alpha1.TiKVMemberType] = struct{}{}
-			err = oa.WaitForTidbComponentsReady(tc1, componentsFilter, 15*time.Minute, 30*time.Second)
-			framework.ExpectNoError(err, "waiting for other components to be ready")
-			err = wait.PollImmediate(time.Second*15, time.Minute*10, tidbIsTLSEnabled(fw, c, ns1, tcName1, ""))
-			framework.ExpectNoError(err, "connect to TLS tidb %s timeout", tcName1)
-
 			ginkgo.By("Fail PD in cluster-1 by setting a wrong image")
 			err = controller.GuaranteedUpdate(genericCli, tc1, func() error {
 				old := tc1.Spec.PD.BaseImage
@@ -515,7 +477,7 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 			framework.ExpectNoError(err, "waiting for the pd to be in unhealthy state")
 
 			ginkgo.By("Restart other components and check cluster status")
-			podList, err = c.CoreV1().Pods(ns1).List(context.TODO(), metav1.ListOptions{})
+			podList, err := c.CoreV1().Pods(ns1).List(context.TODO(), metav1.ListOptions{})
 			framework.ExpectNoError(err, "list pods under namespace %q", ns1)
 			for _, pod := range podList.Items {
 				if !strings.Contains(pod.Name, "tikv") && !strings.Contains(pod.Name, "pd") {
@@ -525,6 +487,7 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 			}
 
 			ginkgo.By("Check cluster components status")
+			componentsFilter := make(map[v1alpha1.MemberType]struct{}, 1)
 			componentsFilter[v1alpha1.PDMemberType] = struct{}{}
 			err = oa.WaitForTidbComponentsReady(tc1, componentsFilter, 15*time.Minute, 30*time.Second)
 			framework.ExpectNoError(err, "waiting for other components to be ready")
