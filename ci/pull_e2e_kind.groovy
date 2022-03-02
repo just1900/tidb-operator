@@ -177,56 +177,58 @@ def build(String name, String code, Map resources = e2ePodResources) {
                 def WORKSPACE = pwd()
                 def ARTIFACTS = "${WORKSPACE}/go/src/github.com/pingcap/tidb-operator/_artifacts"
                 try {
-                    dir("${WORKSPACE}/go/src/github.com/pingcap/tidb-operator") {
-                        unstash 'tidb-operator'
-                        stage("Debug Info") {
-                            println "debug host: 172.16.5.15"
-                            println "debug command: kubectl -n jenkins-tidb exec -ti ${NODE_NAME} bash"
-                            sh """
-                            echo "====== shell env ======"
-                            echo "pwd: \$(pwd)"
-                            env
-                            echo "====== go env ======"
-                            go env
-                            echo "====== docker version ======"
-                            docker version
-                            """
-                        }
-                        stage('Run') {
-                            sh """#!/bin/bash
-                            export GOPATH=${WORKSPACE}/go
-                            export ARTIFACTS=${ARTIFACTS}
-                            export RUNNER_SUITE_NAME=${name}
-
-                            echo "info: create local path for data and coverage"
-                            mount --make-rshared /
-                            mkdir -p /kind-data/control-plane/coverage
-                            mkdir -p /kind-data/worker1/coverage
-                            mkdir -p /kind-data/worker2/coverage
-                            mkdir -p /kind-data/worker3/coverage
-                            ${code}
-                            """
-                        }
-                        stage('Coverage') {
-                            withCredentials([
-                                string(credentialsId: "tp-codecov-token", variable: 'CODECOV_TOKEN')
-                            ]) {
-                                sh """#!/bin/bash
-                                echo "info: list all coverage files"
-                                ls -dla /kind-data/control-plane/coverage/*
-                                ls -dla /kind-data/worker1/coverage/*
-                                ls -dla /kind-data/worker2/coverage/*
-                                ls -dla /kind-data/worker3/coverage/*
-                                echo "info: merging coverage files"
-                                cp /kind-data/control-plane/coverage/*.cov /tmp
-                                cp /kind-data/worker1/coverage/*.cov /tmp
-                                cp /kind-data/worker2/coverage/*.cov /tmp
-                                cp /kind-data/worker3/coverage/*.cov /tmp
-                                ./bin/gocovmerge /tmp/*.cov > /tmp/coverage.txt
-                                source EXPORT_GIT_COMMIT
-                                echo "info: uploading coverage to codecov"
-                                bash <(curl -s https://codecov.io/bash) -t ${CODECOV_TOKEN} -F e2e -n tidb-operator -f /tmp/coverage.txt
+                    timeout(time: 2, unit: 'HOURS'){
+                        dir("${WORKSPACE}/go/src/github.com/pingcap/tidb-operator") {
+                            unstash 'tidb-operator'
+                            stage("Debug Info") {
+                                println "debug host: 172.16.5.15"
+                                println "debug command: kubectl -n jenkins-tidb exec -ti ${NODE_NAME} bash"
+                                sh """
+                                echo "====== shell env ======"
+                                echo "pwd: \$(pwd)"
+                                env
+                                echo "====== go env ======"
+                                go env
+                                echo "====== docker version ======"
+                                docker version
                                 """
+                            }
+                            stage('Run') {
+                                sh """#!/bin/bash
+                                export GOPATH=${WORKSPACE}/go
+                                export ARTIFACTS=${ARTIFACTS}
+                                export RUNNER_SUITE_NAME=${name}
+
+                                echo "info: create local path for data and coverage"
+                                mount --make-rshared /
+                                mkdir -p /kind-data/control-plane/coverage
+                                mkdir -p /kind-data/worker1/coverage
+                                mkdir -p /kind-data/worker2/coverage
+                                mkdir -p /kind-data/worker3/coverage
+                                ${code}
+                                """
+                            }
+                            stage('Coverage') {
+                                withCredentials([
+                                    string(credentialsId: "tp-codecov-token", variable: 'CODECOV_TOKEN')
+                                ]) {
+                                    sh """#!/bin/bash
+                                    echo "info: list all coverage files"
+                                    ls -dla /kind-data/control-plane/coverage/*
+                                    ls -dla /kind-data/worker1/coverage/*
+                                    ls -dla /kind-data/worker2/coverage/*
+                                    ls -dla /kind-data/worker3/coverage/*
+                                    echo "info: merging coverage files"
+                                    cp /kind-data/control-plane/coverage/*.cov /tmp
+                                    cp /kind-data/worker1/coverage/*.cov /tmp
+                                    cp /kind-data/worker2/coverage/*.cov /tmp
+                                    cp /kind-data/worker3/coverage/*.cov /tmp
+                                    ./bin/gocovmerge /tmp/*.cov > /tmp/coverage.txt
+                                    source EXPORT_GIT_COMMIT
+                                    echo "info: uploading coverage to codecov"
+                                    bash <(curl -s https://codecov.io/bash) -t ${CODECOV_TOKEN} -F e2e -n tidb-operator -f /tmp/coverage.txt
+                                    """
+                                }
                             }
                         }
                     }
@@ -272,7 +274,7 @@ try {
         GIT_REF = env.ghprbActualCommit
     }
 
-    timeout (time: 2, unit: 'HOURS') {
+    timeout (time: 4, unit: 'HOURS') {
         // use fixed label, so we can reuse previous workers
         // increase version in pod label when we update pod template
         def buildPodLabel = "tidb-operator-build-v1-pingcap-docker-mirror"
