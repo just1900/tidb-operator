@@ -551,6 +551,7 @@ var _ = ginkgo.Describe("[Across Kubernetes]", func() {
 			framework.ExpectNoError(err, "waiting for other components to be ready")
 			err = wait.PollImmediate(time.Second*15, time.Minute*10, tidbIsTLSEnabled(fw, c, ns1, tcName1, ""))
 			framework.ExpectNoError(err, "connect to TLS tidb %s timeout", tcName1)
+			time.Sleep(1 * time.Hour)
 		})
 
 		ginkgo.It("TiDBCluter Should work when one of the TidbCluster or the k8s fails", func() {
